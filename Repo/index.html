@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>WLC AP Monitoring Dashboard</title>
+
+  <style>
+    body {
+      font-family: "Segoe UI", Arial;
+      background: #0f172a;
+      color: #e5e7eb;
+      padding: 20px;
+    }
+
+    h2 {
+      margin-bottom: 10px;
+    }
+
+    /* ===== STATUS CARDS ===== */
+    .cards {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      flex: 1;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+      font-size: 18px;
+    }
+
+    .total { background: #1e293b; }
+    .up { background: #064e3b; color: #34d399; }
+    .down { background: #7f1d1d; color: #f87171; }
+
+    /* ===== CONTROLS ===== */
+    .controls {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 15px;
+    }
+
+    input {
+      padding: 8px;
+      width: 300px;
+      border-radius: 5px;
+      border: none;
+      outline: none;
+    }
+
+    button {
+      padding: 10px 18px;
+      background: #2563eb;
+      border: none;
+      color: white;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #1d4ed8;
+    }
+
+    /* ===== TABLE ===== */
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      background: #020617;
+    }
+
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #1e293b;
+    }
+
+    th {
+      background: #020617;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    tr:hover {
+      background: #020617;
+    }
+
+    .UP {
+      color: #22c55e;
+      font-weight: bold;
+    }
+
+    .DOWN {
+      color: #ef4444;
+      font-weight: bold;
+    }
+
+    .down-row {
+      background: #1f2937;
+    }
+
+    footer {
+      margin-top: 15px;
+      font-size: 12px;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+
+<body>
+
+<h2>WLC Access Point Dashboard</h2>
+
+<!-- ===== STATUS CARDS ===== -->
+<div class="cards">
+  <div class="card total">
+    Total APs
+    <h1 id="totalCount">0</h1>
+  </div>
+  <div class="card up">
+    APs UP
+    <h1 id="upCount">0</h1>
+  </div>
+  <div class="card down">
+    APs DOWN
+    <h1 id="downCount">0</h1>
+  </div>
+</div>
+
+<!-- ===== CONTROLS ===== -->
+<div class="controls">
+  <input type="text" id="search" placeholder="Search AP / Switch / Status..." onkeyup="filterTable()">
+  <button onclick="refresh()">Run Collector</button>
+</div>
+
+<!-- ===== TABLE ===== -->
+<table>
+  <thead>
+    <tr>
+      <th>AP Name</th>
+      <th>MAC</th>
+      <th>Model</th>
+      <th>Switch</th>
+      <th>Port</th>
+      <th>Switch IP</th>
+      <th>Status</th>
+      <th>Last Seen</th>
+    </tr>
+  </thead>
+  <tbody id="table"></tbody>
+</table>
+
+<footer>
+  Auto refresh every 5 minutes • Manual refresh available
+</footer>
+
+<script>
+let apData = [];
+
+/* ===== SORT DOWN APs FIRST ===== */
+function sortDownFirst(data) {
+  return [...data].sort((a, b) => {
+    if (a.Status === "DOWN" && b.Status !== "DOWN") return -1;
+    if (a.Status !== "DOWN" && b.Status === "DOWN") return 1;
+    return 0;
+  });
+}
+
+/* ===== LOAD DATA ===== */
+function loadData() {
+  fetch("/data")
+    .then(res => res.json())
+    .then(data => {
+      apData = data;
+      updateDashboard(apData);
+      renderTable(sortDownFirst(apData));
+    });
+}
+
+/* ===== DASHBOARD COUNTERS ===== */
+function updateDashboard(data) {
+  const total = data.length;
+  const up = data.filter(ap => ap.Status === "UP").length;
+  const down = data.filter(ap => ap.Status === "DOWN").length;
+
+  document.getElementById("totalCount").innerText = total;
+  document.getElementById("upCount").innerText = up;
+  document.getElementById("downCount").innerText = down;
+}
+
+/* ===== TABLE RENDER ===== */
+function renderTable(data) {
+  const table = document.getElementById("table");
+  table.innerHTML = "";
+
+  data.forEach(ap => {
+    table.innerHTML += `
+      <tr class="${ap.Status === "DOWN" ? "down-row" : ""}">
+        <td>${ap["AP Name"]}</td>
+        <td>${ap["AP MAC"]}</td>
+        <td>${ap["AP Model"] || ""}</td>
+        <td>${ap["Switch Name"]}</td>
+        <td>${ap["Switch Port"]}</td>
+        <td>${ap["Switch IP"]}</td>
+        <td class="${ap.Status}">${ap.Status}</td>
+        <td>${ap["Last Seen"]}</td>
+      </tr>
+    `;
+  });
+}
+
+/* ===== SEARCH FILTER ===== */
+function filterTable() {
+  const search = document.getElementById("search").value.toLowerCase();
+
+  const filtered = apData.filter(ap =>
+    Object.values(ap).some(val =>
+      String(val).toLowerCase().includes(search)
+    )
+  );
+
+  renderTable(sortDownFirst(filtered));
+}
+
+/* ===== MANUAL REFRESH ===== */
+function refresh() {
+  fetch("/refresh")
+    .then(() => setTimeout(loadData, 4000));
+}
+
+/* ===== AUTO REFRESH ===== */
+setInterval(loadData, 300000);
+
+/* ===== INITIAL LOAD ===== */
+loadData();
+</script>
+
+</body>
+
+</html>
